@@ -106,13 +106,13 @@ const fetchWeather = createStep({
 
     const { latitude, longitude, name } = geocodingData.results[0];
 
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weather_code&timezone=auto&hourly=precipitation_probability,temperature_2m`;
     const response = await fetch(weatherUrl);
     const data = (await response.json()) as {
       current: {
         time: string;
         precipitation: number;
-        weathercode: number;
+        weather_code: number;
       };
       hourly: {
         precipitation_probability: number[];
@@ -124,7 +124,7 @@ const fetchWeather = createStep({
       date: new Date().toISOString(),
       maxTemp: Math.max(...data.hourly.temperature_2m),
       minTemp: Math.min(...data.hourly.temperature_2m),
-      condition: getWeatherCondition(data.current.weathercode),
+      condition: getWeatherCondition(data.current.weather_code),
       precipitationChance: data.hourly.precipitation_probability.reduce((acc, curr) => Math.max(acc, curr), 0),
       location: inputData.city,
     };
