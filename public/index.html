@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather Agent</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-card: rgba(15, 23, 42, 0.85);
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.3);
+      --lightning-yellow: #f7931a;
+      --lightning-glow: rgba(247, 147, 26, 0.4);
+      --border: rgba(148, 163, 184, 0.1);
+      --glass: rgba(255, 255, 255, 0.03);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* ===================== WEATHER ANIMATION CANVAS ===================== */
+    #weather-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      transition: opacity 1.5s ease;
+    }
+
+    /* ===================== AMBIENT GRADIENT ===================== */
+    .ambient {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 50% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
+      transition: background 2s ease;
+    }
+    body.weather-rain .ambient,
+    body.weather-drizzle .ambient {
+      background: radial-gradient(ellipse at 50% 0%, rgba(30, 64, 100, 0.2) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 100%, rgba(30, 58, 95, 0.15) 0%, transparent 50%);
+    }
+    body.weather-thunder .ambient {
+      background: radial-gradient(ellipse at 50% 0%, rgba(50, 20, 80, 0.25) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 100%, rgba(20, 10, 40, 0.2) 0%, transparent 50%);
+    }
+    body.weather-snow .ambient {
+      background: radial-gradient(ellipse at 50% 0%, rgba(200, 220, 255, 0.1) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 100%, rgba(180, 200, 240, 0.08) 0%, transparent 50%);
+    }
+    body.weather-clear .ambient {
+      background: radial-gradient(ellipse at 50% 0%, rgba(250, 204, 21, 0.1) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 100%, rgba(251, 146, 60, 0.06) 0%, transparent 50%);
+    }
+    body.weather-cloudy .ambient {
+      background: radial-gradient(ellipse at 50% 0%, rgba(100, 116, 139, 0.12) 0%, transparent 60%);
+    }
+    body.weather-fog .ambient {
+      background: radial-gradient(ellipse at 50% 50%, rgba(148, 163, 184, 0.15) 0%, transparent 70%);
+    }
+
+    /* ===================== LIGHTNING FLASH ===================== */
+    .lightning-flash {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background: white;
+      opacity: 0;
+    }
+    .lightning-flash.flash {
+      animation: lightningFlash 0.15s ease-out;
+    }
+    @keyframes lightningFlash {
+      0%   { opacity: 0.9; }
+      20%  { opacity: 0.1; }
+      40%  { opacity: 0.7; }
+      100% { opacity: 0; }
+    }
+
+    /* ===================== LAYOUT ===================== */
+    .container {
+      position: relative;
+      z-index: 2;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 24px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ===================== HEADER ===================== */
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .logo-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent), #818cf8);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 4px 24px var(--accent-glow);
+    }
+    .logo-text {
+      font-size: 28px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 15px;
+      font-weight: 400;
+      margin-bottom: 40px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* ===================== SEARCH ===================== */
+    .search-box {
+      width: 100%;
+      position: relative;
+      margin-bottom: 32px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 18px 60px 18px 24px;
+      font-size: 17px;
+      font-family: inherit;
+      font-weight: 500;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      color: var(--text-primary);
+      outline: none;
+      backdrop-filter: blur(20px);
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .search-box input::placeholder { color: var(--text-secondary); font-weight: 400; }
+    .search-box input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-glow), 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .search-btn {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), #818cf8);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .search-btn:hover { transform: translateY(-50%) scale(1.05); box-shadow: 0 4px 16px var(--accent-glow); }
+    .search-btn:active { transform: translateY(-50%) scale(0.95); }
+    .search-btn svg { width: 20px; height: 20px; }
+
+    /* ===================== LOADING ===================== */
+    .loader {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .loader.active { display: flex; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text { color: var(--text-secondary); font-size: 14px; }
+
+    /* ===================== WEATHER CARD ===================== */
+    .weather-card {
+      display: none;
+      width: 100%;
+      background: var(--bg-card);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 32px;
+      animation: cardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.3);
+    }
+    .weather-card.visible { display: block; }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(24px) scale(0.96); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .weather-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    .weather-location {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .weather-condition {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      background: var(--glass);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .weather-temp-main {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .temp-icon {
+      font-size: 64px;
+      margin-bottom: 8px;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+    }
+    .temp-value {
+      font-size: 72px;
+      font-weight: 900;
+      letter-spacing: -3px;
+      line-height: 1;
+      background: linear-gradient(180deg, var(--text-primary), var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .temp-feels {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+    }
+
+    .weather-details {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .detail-item {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+    }
+    .detail-icon { font-size: 22px; margin-bottom: 6px; }
+    .detail-value { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+    .detail-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ===================== ERROR ===================== */
+    .error-msg {
+      display: none;
+      width: 100%;
+      text-align: center;
+      padding: 16px 24px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 14px;
+      color: #fca5a5;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .error-msg.visible { display: block; }
+
+    /* ===================== LIGHTNING DONATE ===================== */
+    .donate-section {
+      width: 100%;
+      margin-top: 8px;
+      margin-bottom: 40px;
+    }
+    .donate-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      text-align: center;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.2);
+    }
+    .donate-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .bolt-icon {
+      font-size: 24px;
+      filter: drop-shadow(0 0 8px var(--lightning-glow));
+    }
+    .donate-title {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--lightning-yellow), #fbbf24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .donate-subtitle {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .sats-options {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .sats-btn {
+      padding: 10px 20px;
+      border: 1px solid rgba(247, 147, 26, 0.3);
+      border-radius: 12px;
+      background: rgba(247, 147, 26, 0.08);
+      color: #fbbf24;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sats-btn:hover {
+      background: rgba(247, 147, 26, 0.18);
+      border-color: var(--lightning-yellow);
+      box-shadow: 0 0 20px var(--lightning-glow);
+      transform: translateY(-1px);
+    }
+    .sats-btn.selected {
+      background: linear-gradient(135deg, var(--lightning-yellow), #f59e0b);
+      color: #1a1a2e;
+      border-color: transparent;
+      box-shadow: 0 4px 20px var(--lightning-glow);
+    }
+
+    .custom-sats {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .custom-sats input {
+      width: 120px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 600;
+      text-align: center;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      outline: none;
+    }
+    .custom-sats input:focus { border-color: var(--lightning-yellow); }
+    .custom-sats span { color: var(--text-secondary); font-size: 13px; }
+
+    .donate-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 32px;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--lightning-yellow), #f59e0b);
+      color: #1a1a2e;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 20px var(--lightning-glow);
+    }
+    .donate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px var(--lightning-glow);
+    }
+    .donate-btn:active { transform: translateY(0); }
+    .donate-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .donate-status {
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      min-height: 20px;
+    }
+    .donate-status.success { color: #34d399; }
+    .donate-status.error { color: #fca5a5; }
+
+    /* Invoice modal */
+    .invoice-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      align-items: center;
+      justify-content: center;
+    }
+    .invoice-modal.visible {
+      display: flex;
+    }
+    .invoice-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 16px 64px rgba(0,0,0,0.5);
+    }
+    .invoice-close {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .invoice-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .invoice-amount {
+      color: var(--lightning-yellow);
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+    #qr-canvas {
+      width: 220px;
+      height: 220px;
+      margin: 0 auto 16px;
+      background: white;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .invoice-str {
+      word-break: break-all;
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+      max-height: 80px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+    }
+    .copy-btn {
+      padding: 10px 24px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--glass);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.08); }
+
+    /* ===================== FOOTER ===================== */
+    .footer {
+      text-align: center;
+      padding-bottom: 24px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* ===================== RESPONSIVE ===================== */
+    @media (max-width: 480px) {
+      .container { padding: 0 16px; }
+      .temp-value { font-size: 56px; }
+      .weather-details { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .detail-item { padding: 12px 8px; }
+      .sats-options { gap: 8px; }
+      .sats-btn { padding: 8px 16px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="weather-canvas"></canvas>
+  <div class="ambient"></div>
+  <div class="lightning-flash" id="lightning-flash"></div>
+
+  <div class="container">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12h3M19 12h3M6.3 6.3l2.1 2.1M15.5 15.5l2.1 2.1M12 2v3M12 19v3M6.3 17.7l2.1-2.1M15.5 8.5l2.1-2.1"/>
+          <circle cx="12" cy="12" r="4"/>
+        </svg>
+      </div>
+      <span class="logo-text">Weather Agent</span>
+    </div>
+    <p class="subtitle">Real-time weather predictions with beautiful visualizations.<br>Type any city to see the forecast.</p>
+
+    <div class="search-box">
+      <input type="text" id="city-input" placeholder="Search any city... (e.g. Tokyo, London, New York)" autocomplete="off" />
+      <button class="search-btn" id="search-btn" aria-label="Search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <span class="loader-text">Fetching weather data...</span>
+    </div>
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <div class="weather-card" id="weather-card">
+      <div class="weather-header">
+        <span class="weather-location" id="w-location"></span>
+        <span class="weather-condition" id="w-condition"></span>
+      </div>
+      <div class="weather-temp-main">
+        <div class="temp-icon" id="w-icon"></div>
+        <div class="temp-value" id="w-temp"></div>
+        <div class="temp-feels">Feels like <span id="w-feels"></span></div>
+      </div>
+      <div class="weather-details">
+        <div class="detail-item">
+          <div class="detail-icon">💧</div>
+          <div class="detail-value" id="w-humidity"></div>
+          <div class="detail-label">Humidity</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-icon">💨</div>
+          <div class="detail-value" id="w-wind"></div>
+          <div class="detail-label">Wind</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-icon">🌬️</div>
+          <div class="detail-value" id="w-gust"></div>
+          <div class="detail-label">Gusts</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lightning Network Donation -->
+    <div class="donate-section">
+      <div class="donate-card">
+        <div class="donate-header">
+          <span class="bolt-icon">&#9889;</span>
+          <span class="donate-title">Support via Lightning Network</span>
+        </div>
+        <p class="donate-subtitle">Love this app? Zap some sats! Instant, borderless, tiny fees.</p>
+        <div class="sats-options">
+          <button class="sats-btn" data-sats="21">21 sats</button>
+          <button class="sats-btn selected" data-sats="100">100 sats</button>
+          <button class="sats-btn" data-sats="500">500 sats</button>
+          <button class="sats-btn" data-sats="1000">1K sats</button>
+          <button class="sats-btn" data-sats="5000">5K sats</button>
+        </div>
+        <div class="custom-sats">
+          <input type="number" id="custom-sats" placeholder="Custom" min="1" />
+          <span>sats</span>
+        </div>
+        <button class="donate-btn" id="donate-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4.09 12.71a1 1 0 00.78 1.62H11v5.67a1 1 0 001.78.64L21.91 9.29a1 1 0 00-.78-1.62H13V2.33A1 1 0 0013 2z"/></svg>
+          Donate with Lightning
+        </button>
+        <div class="donate-status" id="donate-status"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Powered by <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> &amp; <a href="https://mastra.ai" target="_blank">Mastra</a>
+    </div>
+  </div>
+
+  <!-- Invoice Modal -->
+  <div class="invoice-modal" id="invoice-modal">
+    <div class="invoice-content">
+      <button class="invoice-close" id="invoice-close">&times;</button>
+      <div class="donate-header" style="margin-bottom:4px">
+        <span class="bolt-icon">&#9889;</span>
+        <span class="invoice-title">Lightning Invoice</span>
+      </div>
+      <div class="invoice-amount" id="invoice-amount"></div>
+      <canvas id="qr-canvas"></canvas>
+      <div class="invoice-str" id="invoice-str" title="Click to copy"></div>
+      <button class="copy-btn" id="copy-btn">Copy Invoice</button>
+    </div>
+  </div>
+
+  <script>
+    // ==================== QR Code Generator (minimal) ====================
+    const QR=(()=>{const EC_L=1;function genQR(text){const data=encode(text.toUpperCase());const size=data.size;const canvas=document.getElementById('qr-canvas');const ctx=canvas.getContext('2d');const scale=Math.floor(Math.min(canvas.width,canvas.height)/(size+8));canvas.width=canvas.height=(size+8)*scale;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#1a1a2e';for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(data.modules[y][x])ctx.fillRect((x+4)*scale,(y+4)*scale,scale,scale);}
+    function encode(text){const segs=[{mode:2,numChars:text.length,data:text}];for(let ver=1;ver<=40;ver++){const dc=getNumDataCodewords(ver,EC_L)*8;const bits=[];pushBits(bits,2,4);pushBits(bits,text.length,ver<=9?9:ver<=26?11:13);for(const c of text){const i="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".indexOf(c);if(i<0)continue;bits.push(i>=0?i:0);}
+    const alphaData=[];for(let i=0;i<text.length;i+=2){if(i+1<text.length){const a="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".indexOf(text[i]);const b="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".indexOf(text[i+1]);pushBits(alphaData,a*45+b,11);}else{const a="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".indexOf(text[i]);pushBits(alphaData,a,6);}}
+    const allBits=[];pushBits(allBits,2,4);pushBits(allBits,text.length,ver<=9?9:ver<=26?11:13);allBits.push(...alphaData);if(allBits.length<=dc){pushBits(allBits,0,Math.min(4,dc-allBits.length));while(allBits.length%8!==0)allBits.push(0);const pads=[0xEC,0x11];while(allBits.length<dc)allBits.push(...intToBits(pads[(allBits.length/8)%2],8));const codewords=[];for(let i=0;i<allBits.length;i+=8){let v=0;for(let j=0;j<8;j++)v=(v<<1)|allBits[i+j];codewords.push(v);}
+    const size=ver*4+17;const modules=Array.from({length:size},()=>Array(size).fill(false));const isFunc=Array.from({length:size},()=>Array(size).fill(false));drawFunctionPatterns(modules,isFunc,ver);const ecInfo=getECInfo(ver,EC_L);const blocks=interleave(codewords,ecInfo);let idx=0;for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!isFunc[y][x]){/* skip */}
+    placeData(modules,isFunc,blocks,size);const bestMask=applyBestMask(modules,isFunc,size);drawFormatBits(modules,EC_L,bestMask,size);return{modules,size};}}}
+    function pushBits(arr,val,len){for(let i=len-1;i>=0;i--)arr.push((val>>>i)&1);}
+    function intToBits(val,len){const b=[];for(let i=len-1;i>=0;i--)b.push((val>>>i)&1);return b;}
+    function getNumDataCodewords(ver,ecl){const t=[[],[7,10,13,17,20,26,36,44,52,60,69,80,92,107,115,127,140,154,170,182,199,223,253,283,313,341,385,406,442,464,514,538,596,628,661,701,745,793,845,901],[10,16,22,28,36,44,64,78,97,111,130,150,176,198,216,240,280,310,338,364,394,442,482,530,570,614,664,718,754,808,871,911,985,1033,1091,1171,1273,1367,1465,1528],[15,26,36,48,64,72,108,132,160,192,224,264,308,352,384,432,480,532,588,650,700,750,816,900,960,1050,1110,1200,1260,1350,1440,1530,1620,1710,1800,1890,1980,2100,2220,2310],[20,36,52,72,96,108,148,188,232,272,312,364,416,480,532,584,644,712,784,868,948,1032,1112,1200,1292,1392,1480,1580,1674,1782,1897,2010,2130,2268,2394,2520,2640,2772,2920,3057]];
+    const totalCw=getNumRawDataModules(ver)/8;return totalCw-t[ecl][ver-1];}
+    function getNumRawDataModules(ver){let r=(16*ver+128)*ver+64;if(ver>=2){const n=Math.floor(ver/7)+2;r-=(25*n-10)*n-55;if(ver>=7)r-=36;}return r;}
+    function getECInfo(ver,ecl){const table=[[1,7,1,19],[1,10,1,16],[1,13,1,13],[1,17,1,9],[1,26,1,34],[1,28,1,28],[1,22,1,22],[1,18,1,16],[1,36,2,55],[1,44,2,44],[2,36,2,35],[2,22,2,13],[2,44,2,80],[4,28,2,32],[2,52,4,68],[2,32,4,43],[2,60,2,78],[2,26,4,27],[4,36,4,31],[4,24,4,15],[4,69,2,116],[4,44,4,68],[4,52,6,78],[6,36,6,43],[4,80,4,133],[8,36,4,40],[6,60,8,93],[8,36,8,45],[4,92,4,132],[4,20,8,34],[6,64,8,98],[8,44,6,36],[8,52,8,121],[10,46,8,75],[8,78,10,146],[12,42,8,54],[10,62,10,109],[14,46,10,63],[12,86,16,163],[12,42,12,65],[14,68,14,120],[16,48,14,65],[16,92,16,163],[12,36,14,73],[14,42,16,113],[16,36,14,65]];
+    const idx=(ver-1)*4+ecl;if(idx>=table.length)return{ecPerBlock:0,numBlocks:1,dcPerBlock:0,totalDC:0};
+    const e=table[idx];return{numBlocks:e[2],ecPerBlock:e[1],dcPerBlock:e[3],totalDC:e[2]*e[3]};}
+    function drawFunctionPatterns(m,f,ver){const s=m.length;for(let i=0;i<s;i++){setFuncModule(m,f,6,i,i%2===0);setFuncModule(m,f,i,6,i%2===0);}
+    drawFinderPattern(m,f,3,3);drawFinderPattern(m,f,s-4,3);drawFinderPattern(m,f,3,s-4);
+    if(ver>=2){const pos=getAlignmentPositions(ver);for(const y of pos)for(const x of pos){if((x<=8&&y<=8)||(x<=8&&y>=s-8)||(x>=s-8&&y<=8))continue;drawAlignmentPattern(m,f,x,y);}}
+    if(ver>=7){for(let i=0;i<18;i++){const bit=(getVersionBits(ver)>>>i)&1;const y=Math.floor(i/3),x=i%3;setFuncModule(m,f,s-11+x,y,bit===1);setFuncModule(m,f,y,s-11+x,bit===1);}}
+    for(let i=0;i<15;i++){setFuncModule(m,f,i<6?i:i<8?i+1:s-15+i,8,false);setFuncModule(m,f,8,i<8?s-1-i:i<9?15-i:14-i,false);}
+    setFuncModule(m,f,8,s-8,true);}
+    function setFuncModule(m,f,x,y,v){if(y>=0&&y<m.length&&x>=0&&x<m.length){m[y][x]=v;f[y][x]=true;}}
+    function drawFinderPattern(m,f,cx,cy){for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const d=Math.max(Math.abs(dx),Math.abs(dy));const x=cx+dx,y=cy+dy;if(x>=0&&x<m.length&&y>=0&&y<m.length)setFuncModule(m,f,x,y,d!==2&&d!==4);}}
+    function drawAlignmentPattern(m,f,cx,cy){for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)setFuncModule(m,f,cx+dx,cy+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);}
+    function getAlignmentPositions(ver){if(ver===1)return[];const n=Math.floor(ver/7)+2;const step=ver===32?26:Math.ceil((ver*4+4)/(2*n-2))*2;const pos=[6];for(let i=1;i<n;i++)pos.splice(1,0,ver*4+10-i*step);return pos;}
+    function getVersionBits(ver){let r=ver;for(let i=0;i<12;i++)r=(r<<1)^((r>>>11)*0x1F25);return(ver<<12)|r;}
+    function placeData(m,f,data,size){let i=0;for(let right=size-1;right>=1;right-=2){if(right===6)right=5;for(let vert=0;vert<size;vert++){for(let j=0;j<2;j++){const x=right-j;const upward=((right+1)&2)===0;const y=upward?size-1-vert:vert;if(!f[y][x]&&i<data.length){m[y][x]=data[i]===1;i++;}}}}}
+    function interleave(dc,info){const blocks=[];let offset=0;for(let i=0;i<info.numBlocks;i++){blocks.push(dc.slice(offset,offset+info.dcPerBlock));offset+=info.dcPerBlock;}
+    const ecBlocks=blocks.map(b=>reedSolomonEncode(b,info.ecPerBlock));const result=[];const maxDC=Math.max(...blocks.map(b=>b.length));for(let i=0;i<maxDC;i++)for(const b of blocks)if(i<b.length)result.push(...intToBits(b[i],8));
+    const maxEC=Math.max(...ecBlocks.map(b=>b.length));for(let i=0;i<maxEC;i++)for(const b of ecBlocks)if(i<b.length)result.push(...intToBits(b[i],8));return result;}
+    function reedSolomonEncode(data,numEC){const gen=reedSolomonGeneratorPoly(numEC);const result=new Array(numEC).fill(0);for(const b of data){const f=result.shift()^b;result.push(0);for(let i=0;i<gen.length;i++)result[i]^=gfMul(gen[i],f);}return result;}
+    function reedSolomonGeneratorPoly(degree){let result=[1];for(let i=0;i<degree;i++){const newResult=new Array(result.length+1).fill(0);for(let j=0;j<result.length;j++){newResult[j+1]^=result[j];newResult[j]^=gfMul(result[j],gfPow(2,i));}result=newResult;}return result.slice(1);}
+    const EXP=new Array(256),LOG=new Array(256);(()=>{let v=1;for(let i=0;i<255;i++){EXP[i]=v;LOG[v]=i;v<<=1;if(v>=256)v^=0x11D;}EXP[255]=EXP[0];})();
+    function gfMul(a,b){return a===0||b===0?0:EXP[(LOG[a]+LOG[b])%255];}
+    function gfPow(base,exp){let r=1;for(let i=0;i<exp;i++)r=gfMul(r,base);return r;}
+    function applyBestMask(m,f,s){let bestPenalty=Infinity,bestMask=0;for(let mask=0;mask<8;mask++){const copy=m.map(r=>[...r]);applyMask(copy,f,mask,s);drawFormatBits(copy,EC_L,mask,s);const p=calcPenalty(copy,s);if(p<bestPenalty){bestPenalty=p;bestMask=mask;}}applyMask(m,f,bestMask,s);return bestMask;}
+    function applyMask(m,f,mask,s){for(let y=0;y<s;y++)for(let x=0;x<s;x++){if(f[y][x])continue;let invert;switch(mask){case 0:invert=(y+x)%2===0;break;case 1:invert=y%2===0;break;case 2:invert=x%3===0;break;case 3:invert=(y+x)%3===0;break;case 4:invert=(Math.floor(y/2)+Math.floor(x/3))%2===0;break;case 5:invert=(y*x)%2+(y*x)%3===0;break;case 6:invert=((y*x)%2+(y*x)%3)%2===0;break;case 7:invert=((y+x)%2+(y*x)%3)%2===0;break;}if(invert)m[y][x]=!m[y][x];}}
+    function drawFormatBits(m,ecl,mask,s){const d=[1,0,2,3][ecl];let bits=(d<<3)|mask;let rem=bits;for(let i=0;i<10;i++)rem=(rem<<1)^((rem>>>9)*0x537);bits=(bits<<10|rem)^0x5412;for(let i=0;i<6;i++)m[8][i]=(bits>>>i&1)===1;m[8][7]=(bits>>>6&1)===1;m[8][8]=(bits>>>7&1)===1;m[7][8]=(bits>>>8&1)===1;for(let i=9;i<15;i++)m[14-i][8]=(bits>>>i&1)===1;for(let i=0;i<8;i++)m[s-1-i][8]=(bits>>>i&1)===1;for(let i=8;i<15;i++)m[8][s-15+i]=(bits>>>i&1)===1;}
+    function calcPenalty(m,s){let p=0;for(let y=0;y<s;y++){let run=1;for(let x=1;x<s;x++){if(m[y][x]===m[y][x-1])run++;else{if(run>=5)p+=run-2;run=1;}}if(run>=5)p+=run-2;}
+    for(let x=0;x<s;x++){let run=1;for(let y=1;y<s;y++){if(m[y][x]===m[y-1][x])run++;else{if(run>=5)p+=run-2;run=1;}}if(run>=5)p+=run-2;}return p;}
+    return{generate:genQR};})();
+
+    // ==================== WEATHER ANIMATIONS ====================
+    const canvas = document.getElementById('weather-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animationType = 'idle';
+    let animFrame;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function createParticles(type, count) {
+      particles = [];
+      for (let i = 0; i < count; i++) {
+        const p = {
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          speed: 0, size: 0, opacity: 0, drift: 0, wobble: 0, wobbleSpeed: 0
+        };
+        if (type === 'rain') {
+          p.speed = 8 + Math.random() * 12;
+          p.size = 1 + Math.random() * 1.5;
+          p.length = 15 + Math.random() * 20;
+          p.opacity = 0.15 + Math.random() * 0.35;
+          p.drift = -1.5;
+        } else if (type === 'heavyrain') {
+          p.speed = 14 + Math.random() * 16;
+          p.size = 1.5 + Math.random() * 2;
+          p.length = 25 + Math.random() * 30;
+          p.opacity = 0.2 + Math.random() * 0.4;
+          p.drift = -2.5;
+        } else if (type === 'snow') {
+          p.speed = 0.5 + Math.random() * 2;
+          p.size = 2 + Math.random() * 4;
+          p.opacity = 0.3 + Math.random() * 0.5;
+          p.wobble = Math.random() * Math.PI * 2;
+          p.wobbleSpeed = 0.01 + Math.random() * 0.03;
+          p.drift = 0;
+        } else if (type === 'fog') {
+          p.x = Math.random() * canvas.width * 2;
+          p.y = Math.random() * canvas.height;
+          p.size = 100 + Math.random() * 200;
+          p.opacity = 0.02 + Math.random() * 0.04;
+          p.speed = 0.2 + Math.random() * 0.5;
+        } else if (type === 'clouds') {
+          p.x = Math.random() * canvas.width * 1.5;
+          p.y = Math.random() * canvas.height * 0.5;
+          p.size = 60 + Math.random() * 140;
+          p.opacity = 0.03 + Math.random() * 0.06;
+          p.speed = 0.1 + Math.random() * 0.4;
+        } else if (type === 'sun') {
+          p.x = canvas.width * 0.5;
+          p.y = canvas.height * 0.25;
+          p.size = 0;
+          p.opacity = 0;
+          p.speed = 0.003;
+          p.angle = (i / count) * Math.PI * 2;
+          p.rayLen = 80 + Math.random() * 120;
+        }
+        particles.push(p);
+      }
+    }
+
+    function drawRain(heavy) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + p.drift * 2, p.y + p.length);
+        ctx.strokeStyle = `rgba(150, 200, 255, ${p.opacity})`;
+        ctx.lineWidth = p.size;
+        ctx.stroke();
+        p.y += p.speed;
+        p.x += p.drift;
+        if (p.y > canvas.height + 20) {
+          p.y = -30;
+          p.x = Math.random() * canvas.width;
+        }
+      }
+    }
+
+    function drawSnow() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        p.wobble += p.wobbleSpeed;
+        ctx.beginPath();
+        ctx.arc(p.x + Math.sin(p.wobble) * 30, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(220, 230, 255, ${p.opacity})`;
+        ctx.fill();
+        p.y += p.speed;
+        if (p.y > canvas.height + 10) {
+          p.y = -10;
+          p.x = Math.random() * canvas.width;
+        }
+      }
+    }
+
+    function drawFog() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        ctx.beginPath();
+        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+        grd.addColorStop(0, `rgba(180, 190, 210, ${p.opacity})`);
+        grd.addColorStop(1, 'rgba(180, 190, 210, 0)');
+        ctx.fillStyle = grd;
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        p.x += p.speed;
+        if (p.x > canvas.width + p.size) p.x = -p.size;
+      }
+    }
+
+    function drawClouds() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        ctx.beginPath();
+        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+        grd.addColorStop(0, `rgba(160, 170, 190, ${p.opacity})`);
+        grd.addColorStop(1, 'rgba(160, 170, 190, 0)');
+        ctx.fillStyle = grd;
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        p.x += p.speed;
+        if (p.x > canvas.width + p.size) p.x = -p.size * 2;
+      }
+    }
+
+    let sunPhase = 0;
+    function drawSun() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      sunPhase += 0.005;
+      const cx = canvas.width * 0.5, cy = canvas.height * 0.2;
+      // Glow
+      const grd = ctx.createRadialGradient(cx, cy, 20, cx, cy, 250);
+      grd.addColorStop(0, 'rgba(255, 220, 100, 0.12)');
+      grd.addColorStop(0.5, 'rgba(255, 180, 50, 0.04)');
+      grd.addColorStop(1, 'rgba(255, 150, 30, 0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Rays
+      for (const p of particles) {
+        const angle = p.angle + sunPhase;
+        const len = p.rayLen * (0.7 + 0.3 * Math.sin(sunPhase * 3 + p.angle * 2));
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(angle) * 40, cy + Math.sin(angle) * 40);
+        ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
+        ctx.strokeStyle = `rgba(255, 210, 80, ${0.06 + 0.04 * Math.sin(sunPhase * 2 + p.angle)})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      // Core
+      ctx.beginPath();
+      ctx.arc(cx, cy, 32, 0, Math.PI * 2);
+      const coreGrd = ctx.createRadialGradient(cx, cy, 0, cx, cy, 32);
+      coreGrd.addColorStop(0, 'rgba(255, 230, 120, 0.25)');
+      coreGrd.addColorStop(1, 'rgba(255, 200, 60, 0.05)');
+      ctx.fillStyle = coreGrd;
+      ctx.fill();
+    }
+
+    let thunderTimer = 0;
+    function triggerLightning() {
+      const flash = document.getElementById('lightning-flash');
+      flash.classList.remove('flash');
+      void flash.offsetWidth;
+      flash.classList.add('flash');
+    }
+
+    function animate() {
+      switch (animationType) {
+        case 'rain': drawRain(false); break;
+        case 'heavyrain': drawRain(true); break;
+        case 'snow': drawSnow(); break;
+        case 'fog': drawFog(); break;
+        case 'clouds': drawClouds(); break;
+        case 'sun': drawSun(); break;
+        case 'thunder':
+          drawRain(true);
+          thunderTimer++;
+          if (thunderTimer > 120 + Math.random() * 200) {
+            triggerLightning();
+            thunderTimer = 0;
+          }
+          break;
+        default:
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      animFrame = requestAnimationFrame(animate);
+    }
+
+    function setWeatherAnimation(condition) {
+      document.body.className = '';
+      const c = condition.toLowerCase();
+      if (c.includes('thunder')) {
+        animationType = 'thunder';
+        createParticles('heavyrain', 300);
+        document.body.classList.add('weather-thunder');
+      } else if (c.includes('heavy rain') || c.includes('violent') || c.includes('freezing rain')) {
+        animationType = 'heavyrain';
+        createParticles('heavyrain', 250);
+        document.body.classList.add('weather-rain');
+      } else if (c.includes('rain') || c.includes('drizzle') || c.includes('shower')) {
+        animationType = 'rain';
+        createParticles('rain', 150);
+        document.body.classList.add('weather-rain', 'weather-drizzle');
+      } else if (c.includes('snow') || c.includes('grains')) {
+        animationType = 'snow';
+        createParticles('snow', 100);
+        document.body.classList.add('weather-snow');
+      } else if (c.includes('fog') || c.includes('mist')) {
+        animationType = 'fog';
+        createParticles('fog', 20);
+        document.body.classList.add('weather-fog');
+      } else if (c.includes('overcast') || c.includes('cloudy')) {
+        animationType = 'clouds';
+        createParticles('clouds', 15);
+        document.body.classList.add('weather-cloudy');
+      } else if (c.includes('clear') || c.includes('sunny') || c.includes('mainly clear')) {
+        animationType = 'sun';
+        createParticles('sun', 24);
+        document.body.classList.add('weather-clear');
+      } else if (c.includes('partly')) {
+        animationType = 'clouds';
+        createParticles('clouds', 8);
+        document.body.classList.add('weather-cloudy');
+      } else {
+        animationType = 'idle';
+        particles = [];
+      }
+      thunderTimer = 0;
+    }
+
+    animate();
+
+    // ==================== WEATHER ICON MAPPING ====================
+    function getWeatherIcon(condition) {
+      const c = condition.toLowerCase();
+      if (c.includes('thunder')) return '&#9928;';
+      if (c.includes('heavy rain') || c.includes('violent')) return '&#127783;';
+      if (c.includes('rain') || c.includes('drizzle') || c.includes('shower')) return '&#127782;';
+      if (c.includes('snow') || c.includes('grains')) return '&#10052;';
+      if (c.includes('fog') || c.includes('mist')) return '&#127787;';
+      if (c.includes('overcast')) return '&#9729;';
+      if (c.includes('cloudy') || c.includes('partly')) return '&#9925;';
+      if (c.includes('clear') || c.includes('sunny')) return '&#9728;';
+      return '&#127780;';
+    }
+
+    // ==================== WEATHER API ====================
+    const MASTRA_API = 'http://localhost:4111';
+
+    async function fetchWeatherDirect(city) {
+      // Use Open-Meteo directly (same as the Mastra tool)
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`);
+      const geoData = await geoRes.json();
+      if (!geoData.results?.[0]) throw new Error(`City "${city}" not found`);
+      const { latitude, longitude, name } = geoData.results[0];
+      const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`);
+      const wData = await wRes.json();
+      const codes = {0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',48:'Depositing rime fog',51:'Light drizzle',53:'Moderate drizzle',55:'Dense drizzle',56:'Light freezing drizzle',57:'Dense freezing drizzle',61:'Slight rain',63:'Moderate rain',65:'Heavy rain',66:'Light freezing rain',67:'Heavy freezing rain',71:'Slight snow fall',73:'Moderate snow fall',75:'Heavy snow fall',77:'Snow grains',80:'Slight rain showers',81:'Moderate rain showers',82:'Violent rain showers',85:'Slight snow showers',86:'Heavy snow showers',95:'Thunderstorm',96:'Thunderstorm with slight hail',99:'Thunderstorm with heavy hail'};
+      return {
+        temperature: wData.current.temperature_2m,
+        feelsLike: wData.current.apparent_temperature,
+        humidity: wData.current.relative_humidity_2m,
+        windSpeed: wData.current.wind_speed_10m,
+        windGust: wData.current.wind_gusts_10m,
+        conditions: codes[wData.current.weather_code] || 'Unknown',
+        location: name,
+      };
+    }
+
+    async function fetchWeather(city) {
+      // Try Mastra API first, fallback to direct
+      try {
+        const res = await fetch(`${MASTRA_API}/api/tools/get-weather/execute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { location: city } }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.result) return data.result;
+          if (data?.temperature !== undefined) return data;
+        }
+      } catch {}
+      return fetchWeatherDirect(city);
+    }
+
+    // ==================== UI ====================
+    const input = document.getElementById('city-input');
+    const searchBtn = document.getElementById('search-btn');
+    const loader = document.getElementById('loader');
+    const errorMsg = document.getElementById('error-msg');
+    const weatherCard = document.getElementById('weather-card');
+
+    async function doSearch() {
+      const city = input.value.trim();
+      if (!city) return;
+      loader.classList.add('active');
+      weatherCard.classList.remove('visible');
+      errorMsg.classList.remove('visible');
+
+      try {
+        const w = await fetchWeather(city);
+        document.getElementById('w-location').textContent = w.location;
+        document.getElementById('w-condition').textContent = w.conditions;
+        document.getElementById('w-icon').innerHTML = getWeatherIcon(w.conditions);
+        document.getElementById('w-temp').textContent = `${Math.round(w.temperature)}°C`;
+        document.getElementById('w-feels').textContent = `${Math.round(w.feelsLike)}°C`;
+        document.getElementById('w-humidity').textContent = `${w.humidity}%`;
+        document.getElementById('w-wind').textContent = `${w.windSpeed} km/h`;
+        document.getElementById('w-gust').textContent = `${w.windGust} km/h`;
+        setWeatherAnimation(w.conditions);
+        weatherCard.classList.add('visible');
+      } catch (e) {
+        errorMsg.textContent = e.message || 'Failed to fetch weather data';
+        errorMsg.classList.add('visible');
+        setWeatherAnimation('idle');
+      } finally {
+        loader.classList.remove('active');
+      }
+    }
+
+    searchBtn.addEventListener('click', doSearch);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+    // ==================== LIGHTNING DONATION ====================
+    let selectedSats = 100;
+
+    document.querySelectorAll('.sats-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sats-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedSats = parseInt(btn.dataset.sats);
+        document.getElementById('custom-sats').value = '';
+      });
+    });
+
+    document.getElementById('custom-sats').addEventListener('input', e => {
+      const v = parseInt(e.target.value);
+      if (v > 0) {
+        selectedSats = v;
+        document.querySelectorAll('.sats-btn').forEach(b => b.classList.remove('selected'));
+      }
+    });
+
+    const donateBtn = document.getElementById('donate-btn');
+    const donateStatus = document.getElementById('donate-status');
+
+    donateBtn.addEventListener('click', async () => {
+      const amount = selectedSats;
+      donateStatus.className = 'donate-status';
+      donateStatus.textContent = '';
+      donateBtn.disabled = true;
+
+      // Try WebLN first (Alby extension, etc.)
+      if (typeof window.webln !== 'undefined') {
+        try {
+          await window.webln.enable();
+          const invoice = await window.webln.makeInvoice({ amount, defaultMemo: 'Weather Agent Donation' });
+          if (invoice?.paymentRequest) {
+            await window.webln.sendPayment(invoice.paymentRequest);
+            donateStatus.className = 'donate-status success';
+            donateStatus.textContent = `Thank you for ${amount} sats! ⚡`;
+            donateBtn.disabled = false;
+            return;
+          }
+        } catch (e) {
+          // WebLN failed, try keysend or fallback
+          try {
+            await window.webln.enable();
+            // Try lnurl or just show the invoice modal
+          } catch {}
+        }
+      }
+
+      // Fallback: Try creating invoice via Mastra API (if available)
+      try {
+        const res = await fetch(`${MASTRA_API}/api/donate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount_sats: amount }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.invoice) {
+            showInvoiceModal(data.invoice, amount);
+            donateBtn.disabled = false;
+            return;
+          }
+        }
+      } catch {}
+
+      // Final fallback: show instructions
+      donateStatus.className = 'donate-status';
+      donateStatus.innerHTML = 'Install <a href="https://getalby.com" target="_blank" style="color:#fbbf24">Alby</a> browser extension to donate via Lightning, or scan a Lightning invoice from your wallet app.';
+      donateBtn.disabled = false;
+    });
+
+    function showInvoiceModal(invoice, amount) {
+      const modal = document.getElementById('invoice-modal');
+      document.getElementById('invoice-amount').textContent = `${amount} sats`;
+      document.getElementById('invoice-str').textContent = invoice;
+      modal.classList.add('visible');
+      try { QR.generate(invoice); } catch {}
+    }
+
+    document.getElementById('invoice-close').addEventListener('click', () => {
+      document.getElementById('invoice-modal').classList.remove('visible');
+    });
+    document.getElementById('invoice-modal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
+    });
+    document.getElementById('invoice-str').addEventListener('click', () => {
+      navigator.clipboard.writeText(document.getElementById('invoice-str').textContent);
+      document.getElementById('copy-btn').textContent = 'Copied!';
+      setTimeout(() => document.getElementById('copy-btn').textContent = 'Copy Invoice', 2000);
+    });
+    document.getElementById('copy-btn').addEventListener('click', () => {
+      navigator.clipboard.writeText(document.getElementById('invoice-str').textContent);
+      document.getElementById('copy-btn').textContent = 'Copied!';
+      setTimeout(() => document.getElementById('copy-btn').textContent = 'Copy Invoice', 2000);
+    });
+
+    // Start with a gentle idle animation
+    setWeatherAnimation('partly cloudy');
+  </script>
+</body>
+</html>
